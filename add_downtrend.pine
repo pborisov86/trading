@@ -87,7 +87,7 @@ sma200 = ta.sma(close, 200)
 priceAboveSMA = close > sma200
 
 // Start tracking low1
-inLowZone = offset1 < 320 and offset2 < 220 and offset3 < 120 and offset4 < 20 and close > sma200
+inLowZone = offset1 < 320 and offset2 < 220 and offset3 < 120 and offset4 < 20
 crossAbove20 = ta.crossover(offset1, 340)
 
 if inLowZone and na(startBar) and priceAboveSMA
@@ -153,12 +153,14 @@ if canCheckForLow2 and not na(barDistance)
         lowestD1ValueSinceLow1 := na
         lowestD2ValueSinceLow1 := na
 
-if pendingLow2Confirmation and bar_index == pendingLow2BarIndex + 1
-    bool isGreen = close > open
-    float low2BodyMid = (open + close) / 2
-    bool strongClose = close >= low2BodyMid
-    if isGreen and strongClose
+if pendingLow2Confirmation and bar_index > pendingLow2BarIndex
+    bool wasFirstGreenAfterLow2 = close[1] > open[1]
+    bool confirmedOnThisBar = wasFirstGreenAfterLow2 and bar_index == pendingLow2BarIndex + 2
+    float low2BodyMid = (open[1] + close[1]) / 2
+    bool strongClose = close[1] >= low2BodyMid
+    if confirmedOnThisBar and strongClose
         low2Label := label.new(x=pendingLow2BarIndex, y=-20, style=label.style_label_up, color=color.yellow, size=size.tiny, text="2")
-    pendingLow2Confirmation := false
-    pendingLow2BarIndex := na
+    if bar_index > pendingLow2BarIndex + 2
+        pendingLow2Confirmation := false
+        pendingLow2BarIndex := na
 
