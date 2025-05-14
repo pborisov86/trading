@@ -83,18 +83,19 @@ var bool canCheckForLow2 = false
 var int low1BarIndex = na
 var int low2BarIndex = na
 
-bool inDowntrend = close < d4
+sma200 = ta.sma(close, 200)
+priceAboveSMA = close > sma200
 
 // Start tracking low1
-inLowZone = offset1 < 320 and offset2 < 220 and offset3 < 120 and offset4 < 20
+inLowZone = offset1 < 320 and offset2 < 220 and offset3 < 120 and offset4 < 20 and close > sma200
 crossAbove20 = ta.crossover(offset1, 340)
 
-if inLowZone and na(startBar) and inDowntrend
+if inLowZone and na(startBar) and priceAboveSMA
     startBar := bar_index
     lowestLow := low
     lowestLowBarIndex := bar_index
 
-if inLowZone and not na(startBar) and inDowntrend
+if inLowZone and not na(startBar) and priceAboveSMA
     if low < lowestLow
         lowestLow := low
         lowestLowBarIndex := bar_index
@@ -130,7 +131,7 @@ if canCheckForLow2 and not na(barDistance)
     bool d1StayedAbove20 = not na(lowestD1ValueSinceLow1) and lowestD1ValueSinceLow1 >= 20
     bool d2StayedAbove20 = not na(lowestD2ValueSinceLow1) and lowestD2ValueSinceLow1 >= 20
 
-    if barDistance <= maxBarsBetweenLow1andLow2 and inDowntrend
+    if barDistance <= maxBarsBetweenLow1andLow2 and priceAboveSMA
         if isDoubleBottomOrLower and stochsRebounded and d1StayedAbove20 and d2StayedAbove20
             pendingLow2Confirmation := true
             pendingLow2BarIndex := bar_index
