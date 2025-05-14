@@ -1,0 +1,163 @@
+//@version=6
+indicator(title="Quad Rotation Stochastics (signal)", shorttitle="%QRS%", format=format.price, precision=2, overlay=false)
+
+// === Inputs ===
+kLen1 = input.int(9, title="%K Length 1", minval=1)
+smoothK1 = input.int(1, title="%K Smoothing 1", minval=1)
+dLen1 = input.int(3, title="%D Length 1", minval=1)
+
+kLen2 = input.int(14, title="%K Length 2", minval=1)
+smoothK2 = input.int(1, title="%K Smoothing 2", minval=1)
+dLen2 = input.int(3, title="%D Length 2", minval=1)
+
+kLen3 = input.int(40, title="%K Length 3", minval=1)
+smoothK3 = input.int(1, title="%K Smoothing 3", minval=1)
+dLen3 = input.int(4, title="%D Length 3", minval=1)
+
+kLen4 = input.int(60, title="%K Length 4", minval=1)
+smoothK4 = input.int(1, title="%K Smoothing 4", minval=1)
+dLen4 = input.int(10, title="%D Length 4", minval=1)
+
+// === Calculations ===
+k1 = ta.sma(ta.stoch(close, high, low, kLen1), smoothK1)
+d1 = ta.sma(k1, dLen1)
+k2 = ta.sma(ta.stoch(close, high, low, kLen2), smoothK2)
+d2 = ta.sma(k2, dLen2)
+k3 = ta.sma(ta.stoch(close, high, low, kLen3), smoothK3)
+d3 = ta.sma(k3, dLen3)
+k4 = ta.sma(ta.stoch(close, high, low, kLen4), smoothK4)
+d4 = ta.sma(k4, dLen4)
+
+offset1 = d1 + 300
+offset2 = d2 + 200
+offset3 = d3 + 100
+offset4 = d4
+
+plot(offset1, title="D 9", color=color.white, linewidth=2)
+plot(offset2, title="D 14", color=color.green, linewidth=2)
+plot(offset3, title="D 40", color=color.red, linewidth=2)
+plot(offset4, title="D 60", color=color.yellow, linewidth=2)
+
+hline(20, "Oversold (D60)", color=color.yellow, linestyle=hline.style_dotted)
+hline(80, "Overbought (D60)", color=color.yellow, linestyle=hline.style_dotted)
+hline(120, "Oversold (D40)", color=color.red, linestyle=hline.style_dotted)
+hline(180, "Overbought (D40)", color=color.red, linestyle=hline.style_dotted)
+hline(220, "Oversold (D14)", color=color.green, linestyle=hline.style_dotted)
+hline(280, "Overbought (D14)", color=color.green, linestyle=hline.style_dotted)
+hline(320, "Oversold (D9)", color=color.white, linestyle=hline.style_dotted)
+hline(380, "Overbought (D9)", color=color.white, linestyle=hline.style_dotted)
+
+hline(0, "Separator bottom", color=color.gray, linestyle=hline.style_solid)
+hline(100, "Separator D60/D40", color=color.gray, linestyle=hline.style_solid)
+hline(200, "Separator D40/D14", color=color.gray, linestyle=hline.style_solid)
+hline(300, "Separator D14/D9", color=color.gray, linestyle=hline.style_solid)
+hline(400, "Separator top", color=color.gray, linestyle=hline.style_solid)
+
+signalOverbought = offset1 > 385 and offset2 > 285 and offset3 > 185 and offset4 > 85
+signalSold = offset1 < 315 and offset2 < 215 and offset3 < 115 and offset4 < 15
+
+plot(signalOverbought ? 410 : na, title="Sell Signal", color=color.rgb(5, 247, 13), style=plot.style_circles, linewidth=3)
+plot(signalSold ? -10 : na, title="Buy Signal", color=color.rgb(252, 6, 6), style=plot.style_circles, linewidth=3)
+
+alertcondition(signalOverbought, title="Overbought Alert", message="Quad Stochastic Overbought!")
+alertcondition(signalSold, title="Oversold Alert", message="Quad Stochastic Oversold!")
+
+// === Divergence Detection State ===
+var float lowestD1ValueSinceLow1 = na
+var float lowestD2ValueSinceLow1 = na
+var bool pendingLow2Confirmation = false
+var int pendingLow2BarIndex = na
+var int startBar = na
+var float low1 = na
+var float lowestLow = na
+var int lowestLowBarIndex = na
+var label low1Label = na
+var float low1Low = na
+var float low1High = na
+var float low1BodyMinStored = na
+var float low1BodyMaxStored = na
+
+// vars for low2
+var label low2Label = na
+var bool canCheckForLow2 = false
+var int low1BarIndex = na
+var int low2BarIndex = na
+
+bool inDowntrend = close < d4
+
+// Start tracking low1
+inLowZone = offset1 < 320 and offset2 < 220 and offset3 < 120 and offset4 < 20
+crossAbove20 = ta.crossover(offset1, 340)
+
+if inLowZone and na(startBar) and inDowntrend
+    startBar := bar_index
+    lowestLow := low
+    lowestLowBarIndex := bar_index
+
+if inLowZone and not na(startBar) and inDowntrend
+    if low < lowestLow
+        lowestLow := low
+        lowestLowBarIndex := bar_index
+
+if crossAbove20 and not na(startBar)
+    float low1Open = open[bar_index - lowestLowBarIndex]
+    float low1Close = close[bar_index - lowestLowBarIndex]
+    low1 := lowestLow
+    low1Low := low[bar_index - lowestLowBarIndex]
+    low1High := high[bar_index - lowestLowBarIndex]
+    low1BodyMinStored := math.min(low1Open, low1Close)
+    low1BodyMaxStored := math.max(low1Open, low1Close)
+    canCheckForLow2 := true
+    low1BarIndex := lowestLowBarIndex
+    lowestD1ValueSinceLow1 := d1
+    lowestD2ValueSinceLow1 := d2
+    low1Label := label.new(x=lowestLowBarIndex, y=-20, style=label.style_label_up, color=color.red, size=size.tiny, text="1")
+    startBar := na
+    lowestLow := na
+    lowestLowBarIndex := na
+
+int maxBarsBetweenLow1andLow2 = 15
+barDistance = not na(low1BarIndex) ? bar_index - low1BarIndex : na
+
+if canCheckForLow2
+    lowestD1ValueSinceLow1 := na(lowestD1ValueSinceLow1) ? d1 : math.min(lowestD1ValueSinceLow1, d1)
+    lowestD2ValueSinceLow1 := na(lowestD2ValueSinceLow1) ? d2 : math.min(lowestD2ValueSinceLow1, d2)
+    
+if canCheckForLow2 and not na(barDistance)
+    float low2BodyMin = math.min(open, close)
+    bool isDoubleBottomOrLower = low2BodyMin <= low1BodyMinStored
+    bool stochsRebounded = offset1 > 320 and offset1 < 360 and offset2 > 220 and offset2 < 260 and offset3 > 120 and offset3 < 160
+    bool d1StayedAbove20 = not na(lowestD1ValueSinceLow1) and lowestD1ValueSinceLow1 >= 20
+    bool d2StayedAbove20 = not na(lowestD2ValueSinceLow1) and lowestD2ValueSinceLow1 >= 20
+
+    if barDistance <= maxBarsBetweenLow1andLow2 and inDowntrend
+        if isDoubleBottomOrLower and stochsRebounded and d1StayedAbove20 and d2StayedAbove20
+            pendingLow2Confirmation := true
+            pendingLow2BarIndex := bar_index
+            canCheckForLow2 := false
+            low2BarIndex := bar_index
+            lowestD1ValueSinceLow1 := na
+            lowestD2ValueSinceLow1 := na
+    else
+        canCheckForLow2 := false
+        low1 := na
+        low1Low := na
+        low1High := na
+        low1BodyMinStored := na
+        low1BodyMaxStored := na
+        low1BarIndex := na
+        startBar := na
+        lowestLow := na
+        lowestLowBarIndex := na
+        lowestD1ValueSinceLow1 := na
+        lowestD2ValueSinceLow1 := na
+
+if pendingLow2Confirmation and bar_index == pendingLow2BarIndex + 1
+    bool isGreen = close > open
+    float low2BodyMid = (open + close) / 2
+    bool strongClose = close >= low2BodyMid
+    if isGreen and strongClose
+        low2Label := label.new(x=pendingLow2BarIndex, y=-20, style=label.style_label_up, color=color.yellow, size=size.tiny, text="2")
+    pendingLow2Confirmation := false
+    pendingLow2BarIndex := na
+
