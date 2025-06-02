@@ -76,8 +76,8 @@ hline(390, "Extreme Overbought (D9)", color=color.white, linestyle=hline.style_d
 //hline(400, "Separator (D9)", color=color.gray, linestyle=hline.style_solid)
 
 // Signal conditions based on stacked levels
-signalOverbought = offset1 > 385 and offset2 > 285 and offset3 > 185 and offset4 > 85
-signalSold = offset1 < 315 and offset2 < 215 and offset3 < 115 and offset4 < 15
+signalOverbought = offset1 > 380 and offset2 > 280 and offset3 > 180 and offset4 > 80
+signalSold = offset1 < 320 and offset2 < 220 and offset3 < 120 and offset4 < 20
 
 // Plot dots for buy (0 line) and sell (400 line) signals
 plot(signalOverbought ? 410 : na, title="Sell Signal", color=color.rgb(5, 247, 13), style=plot.style_circles, linewidth=3)
@@ -88,8 +88,7 @@ alertcondition(signalOverbought, title="Overbought Alert", message="Quad Stochas
 alertcondition(signalSold, title="Oversold Alert", message="Quad Stochastic Oversold!")
 
 // === State Variables ===
-var int startBar = na
-var float low1 = na
+var bool trackingLowPeriod = false
 var float lowestLow = na
 var int lowestLowBarIndex = na
 var label low1Label = na
@@ -126,29 +125,36 @@ var float entryCandleLow = na
 var float stopLossPrice = na
 var bool inPosition = false
 
-inLowZone = offset1 < 318  // and offset2 < 220 and offset3 < 120 and offset4 < 20
-crossAbove40 = ta.crossover(offset1, 333)
+var float low2Open = na
+var float low2Close = na
+var float low2BodyTop = na
+var float low2BodyBottom = na
 
-// === Track Start of Low1 ===
-if inLowZone and na(startBar)
-    startBar := bar_index
+// === MODIFIED LOW1 LOGIC ===
+// Start tracking when offset1 first goes below 309
+
+if not trackingLowPeriod and offset1 < 309 //and offset2 < 220 //and offset3 < 120 and offset4 < 20 
+    trackingLowPeriod := true
     lowestLow := low
     lowestLowBarIndex := bar_index
 
-if inLowZone and not na(startBar)
+// Continue tracking lowest low during entire period from below 309 until cross above 322
+if trackingLowPeriod
     if low < lowestLow
         lowestLow := low
         lowestLowBarIndex := bar_index
 
-if crossAbove40 and not na(startBar)
-    low1 := lowestLow
+// When offset1 crosses above 322, capture the Low1 from the entire tracked period
+crossAbove322 = ta.crossover(offset1, 322)
+if crossAbove322 and trackingLowPeriod
+    // Capture Low1 data from the lowest point during the entire tracking period
     low1Low := low[bar_index - lowestLowBarIndex]
     low1High := high[bar_index - lowestLowBarIndex]
     low1Middle := (low1Low + low1High) / 2
     low1Open := open[bar_index - lowestLowBarIndex]
     low1Close := close[bar_index - lowestLowBarIndex]
     low1BodyBottom := math.min(low1Open, low1Close)
-    low1Close := close[bar_index - lowestLowBarIndex]  // NEW: track close of low1
+    
     canCheckForLow2 := true
     low1BarIndex := lowestLowBarIndex
     lowestD1ValueSinceLow1 := offset1
@@ -156,59 +162,63 @@ if crossAbove40 and not na(startBar)
 
     low1Label := label.new(x=lowestLowBarIndex, y=-20, style=label.style_label_up, color=color.red, size=size.tiny, text="1")
 
-    startBar := na
+    // Reset tracking variables
+    trackingLowPeriod := false
     lowestLow := na
     lowestLowBarIndex := na
 
 // === Track d1 Validity ===
-if not na(low1) and offset1 < 320
+if not na(low1BarIndex) and offset1 < 320
     d1ValidSinceCross := false
 
 // === Detect Low2 ===
-if canCheckForLow2 and not na(low1)
+if canCheckForLow2 and not na(low1BarIndex)
     candleDistance = bar_index - low1BarIndex
 
-    if candleDistance > 14
+    if candleDistance > 12
         canCheckForLow2 := false
-        low1 := na
         low1BarIndex := na
         d1ValidSinceCross := true
 
-    else if candleDistance >= 4 and low <= low1 and offset1 > 320 and d1ValidSinceCross and offset1 < 370
+    else if candleDistance >= 4 and low <= low1BodyBottom and offset1 > 320 and d1ValidSinceCross and offset1 < 370 
         low2Label := label.new(x=bar_index, y=-20, style=label.style_label_up, color=color.yellow, size=size.tiny, text="2")
         canCheckForLow2 := false
         canCheckForLow3 := true
         low2BarIndex := bar_index
         low2High := high
         low2Low := low
+        low2Open := open
+        low2Close := close
+        low2BodyBottom := math.min(open, close)
+        low2BodyTop := math.max(open, close)
         low2CandleCounter := 0
 
 // === Detect Low3 ===
 if canCheckForLow3
     low2CandleCounter += 1
 
-    if close > low2High and offset1 > 320 and d1ValidSinceCross and offset1 < 370
+    if close > low2BodyTop and offset1 > 320 and d1ValidSinceCross and offset1 < 356
         low3Label := label.new(x=bar_index, y=-20, style=label.style_label_up, color=color.green, size=size.tiny, text="3")
-
-        entrySignal := true  // <-- Entry signal on green label print
+        
+        entrySignal := true  // <-- Entry signal on green label print        
 
         entryPrice := close
         entryLow := low
 
+        // === NEW: Capture entry candle data ===
         entryCandleOpen := open
         entryCandleClose := close
         entryCandleHigh := high
         entryCandleLow := low
-
+        
         // Calculate 30% stop loss based on candle range
         candleRange = entryCandleHigh - entryCandleLow
-        stopLossAmount = candleRange * 1.4
+        stopLossAmount = candleRange * 1.6
         stopLossPrice := entryCandleLow - stopLossAmount
 
         // Reset tracking
         canCheckForLow3 := false
 
-        low1 := na
         low1BarIndex := na
         low2BarIndex := na
         low2High := na
@@ -216,10 +226,9 @@ if canCheckForLow3
         lowestD1ValueSinceLow1 := na
         d1ValidSinceCross := true
 
-    else if low2CandleCounter >= 6
+    else if low2CandleCounter >= 4
         canCheckForLow3 := false
         canCheckForLow2 := false
-        low1 := na
         low1BarIndex := na
         low2BarIndex := na
         low2High := na
@@ -248,17 +257,17 @@ exitCondition = false
 
 if inPosition
     // Stop loss: price drops to calculated stop loss level
-    stopLossHit = low <= stopLossPrice //or ta.crossunder(offset1, 330)
-
+    stopLossHit = low <= stopLossPrice //or ta.crossunder(offset1, 320)
+    
     // Take profit: d1 has crossed above 80 before, and now crosses under 60
-    takeProfitHit = d1CrossedAbove80 //and ta.crossunder(offset1, 378)
+    takeProfitHit = d1CrossedAbove80 and ta.crossunder(offset1, 350)
     exitCondition := stopLossHit or takeProfitHit
 
 if exitCondition and inPosition
     strategy.close("Long")
     inPosition := false
     d1CrossedAbove80 := false  // Reset the flag after exit
-
+    
     // Reset exit variables
     entryCandleOpen := na
     entryCandleClose := na
